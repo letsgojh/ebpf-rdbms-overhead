@@ -1,0 +1,86 @@
+name: "실험 태스크 (Experiment Task)"
+description: "Group A~J 실험 구현/실행 단위 작업을 등록합니다."
+title: "[SYSTEM][GROUP] "
+labels: ["experiment"]
+body:
+  - type: dropdown
+    id: system
+    attributes:
+      label: 대상 시스템
+      options:
+        - duckdb
+        - umbra
+        - postgresql
+        - mysql
+        - clickhouse
+        - common
+    validations:
+      required: true
+
+  - type: dropdown
+    id: group
+    attributes:
+      label: 실험 그룹
+      options:
+        - "A - 메커니즘 비용 분해"
+        - "B - 스케일×빈도 증폭 법칙"
+        - "C - 동시성 증폭"
+        - "D - 유저스페이스 vs 커널스페이스"
+        - "E - 쿼리 플랜 민감도"
+        - "F - 하드웨어 카운터 원인분석"
+        - "G - 데이터 수집 채널 비교"
+        - "H - 완화 전략"
+        - "I - 커널 버전 비교"
+        - "J - 종합 사례연구"
+        - "공통 (common/)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: 목적 / 배경
+      description: 이 작업이 실험설계 문서의 어느 부분에 해당하는지, 왜 필요한지
+      placeholder: "예: A-1 격리 floor 측정용 하네스 구현. docs/01_experiment_design.md의 A-1 절차 참고."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: 작업 내용 (체크리스트)
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done
+      placeholder: "예: probe 4종 × 100회 반복 결과 CSV가 common/schema/result_schema.json 검증 통과"
+    validations:
+      required: true
+
+  - type: textarea
+    id: blockers
+    attributes:
+      label: 의존성 / 블로커
+      placeholder: "예: Umbra 접근성 미확정 — 확정 전까지 착수 불가"
+
+  - type: input
+    id: docs_link
+    attributes:
+      label: 관련 문서 링크
+      placeholder: "docs/01_experiment_design.md#group-a"
+
+  - type: checkboxes
+    id: tier
+    attributes:
+      label: 관련 비용 계층 (Tier)
+      options:
+        - label: "Tier 1 (처리량 저하율 / 레이턴시 오버헤드 / CPU 오버헤드)"
+        - label: "Tier 2 (하드웨어 PMU 카운터 / run_time_ns)"
+        - label: "Tier 3 (메모리 풋프린트 / 이벤트 드롭율 / verifier 비용)"

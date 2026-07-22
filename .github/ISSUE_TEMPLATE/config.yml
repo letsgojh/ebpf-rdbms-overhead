@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 실험설계 문서
+    url: https://github.com/letsgojh/ebpf-rdbms-overhead/blob/main/docs/01_experiment_design.md
+    about: 실험 그룹별 상세 프로토콜(목적/가설/DoD/절차)은 여기서 확인하세요.
+  - name: 연구계획서
+    url: https://github.com/letsgojh/ebpf-rdbms-overhead/blob/main/docs/00_research_proposal.md
+    about: 전체 연구 배경·RQ·범위는 여기서 확인하세요.
