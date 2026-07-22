@@ -18,15 +18,15 @@ make smoke-test SYSTEM=duckdb
 ```
 
 내부적으로 하는 일: probe 4종 + harness 빌드 → 소규모(N=100000, reps=3)로 none/kprobe/fentry/
-tracepoint/raw_tracepoint 5종 전부 실행 → 스키마 검증 → `report.xlsx` 생성. 마지막에
+tracepoint/raw_tracepoint 5종 전부 실행 → 스키마 검증 → `.xlsx` 리포트 생성. 마지막에
 "스모크 테스트 통과"가 뜨면 이 harness가 이 서버에서 정상 동작한다는 뜻이다. `scratch/a1_smoke_test/
-report.xlsx`를 열어보면 5종 전체 요약을 한 번에 볼 수 있다.
+ebpf-rdbms-overhead_duckdb_groupA_<날짜>_<host>.xlsx`를 열어보면 5종 전체 요약을 한 번에 볼 수 있다.
 
 문제없이 통과했으면 실제 규모로:
 ```bash
 make run-all SYSTEM=duckdb                              # 5종 전부, REPS=100 N=10^7 (기본값)
 make run SYSTEM=duckdb PROBE=kprobe REPS=100 N=10000000  # probe 1종만
-make report OUTDIR=../../../systems/duckdb/results/group_a   # 5종 요약 .xlsx (뒤에서 설명)
+make report SYSTEM=duckdb                                # 5종 요약 .xlsx (뒤에서 설명, OUTDIR은 SYSTEM에서 자동 계산)
 ```
 
 `SYSTEM`은 duckdb/postgresql/mysql/clickhouse/umbra 중 **자기 담당 시스템**으로 지정한다(최상위
@@ -145,9 +145,13 @@ tracepoint/raw_tracepoint) 전부 정상 실행 + `validate_schema.py` 통과까
   4종 × 4지표(mean/p50/p99/p999) = 16행.
 
 ```bash
-python3 report_xlsx.py --outdir <outdir>              # <outdir>/report.xlsx 생성
-python3 report_xlsx.py --outdir <outdir> --seed 0     # 재현 가능한 resample (기본값도 0)
+python3 report_xlsx.py --outdir <outdir> --system duckdb   # <outdir>/ebpf-rdbms-overhead_duckdb_groupA_<날짜>_<host>.xlsx 생성
+python3 report_xlsx.py --outdir <outdir> --system duckdb --seed 0   # 재현 가능한 resample (기본값도 0)
+python3 report_xlsx.py --outdir <outdir> --system duckdb --output my_report.xlsx  # 파일명 직접 지정
 ```
+`--system`은 `systems/README.md`의 압축 파일명 규칙(`ebpf-rdbms-overhead_<system>_<group>_<날짜>_<host>.tar.gz`)과
+맞추기 위한 필수 인자다 — group_a 결과 디렉토리는 그대로 `tar.gz`로 묶이므로, 안에 든 `.xlsx`도 같은 이름
+규칙을 따라야 나중에 파일 하나만 따로 꺼내 봐도 어떤 시스템/그룹/날짜/서버산인지 알 수 있다.
 
 합성 데이터(none~raw_tracepoint 평균이 서로 다른 정규분포)로 시트 구조와 값 계산 확인함 —
 실제 서버 데이터로는 아직 안 돌려봄.

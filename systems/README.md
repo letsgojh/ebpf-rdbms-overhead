@@ -23,7 +23,12 @@ ebpf-rdbms-overhead_<system>_<group>_<YYYYMMDD>_<host>.tar.gz
 
 N/REPS/probe_type 같은 세부 파라미터는 파일명에 안 넣는다 — 이미 CSV 파일명(`duckdb_kprobe_na_na_run042.csv`)과 컬럼(`run_id`, `timestamp`, `kernel_version`)에 다 들어있어서, 압축 파일명까지 길어지면 오히려 못 알아본다.
 
-**`raw/`(반복당 원시 delta 텍스트)는 기본적으로 압축에서 뺀다.** probe 5종 × 100회 × N=10^7줄이면
+**`report.xlsx`(Group A `report_xlsx.py`가 만드는 5종 요약본)도 확장자만 바꿔 같은 템플릿을 쓴다**:
+`ebpf-rdbms-overhead_<system>_<group>_<YYYYMMDD>_<host>.xlsx`. 이 파일은 `raw/` 밖(그룹 디렉토리
+바로 아래)에 생기므로 위 압축에 그대로 같이 들어가지만, 파일 하나만 따로 꺼내 공유해도 이름만 보고
+어떤 시스템/그룹/날짜/서버산인지 알 수 있어야 하므로 압축 파일명과 동일한 규칙을 그대로 적용한다.
+
+**`raw/`(반복당 원시 delta 텍스트)는 기본적으로 압축에서 뺀다.** probe 5종 × 100회 × N=10^7줄이면1
 `raw/`만 수십 GB라(실측: DuckDB Group A 기준 38GB), 매번 그대로 압축하면 시간도 오래 걸리고
 구글드라이브 용량도 금방 찬다. CSV에 이미 run별 mean/p50/p99/p999가 계산돼 들어있어서 웬만한
 분석엔 그걸로 충분하고, raw 원시값은 필요하면 harness를 다시 돌려 재생성할 수 있다(재현 가능한

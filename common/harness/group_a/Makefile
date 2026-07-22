@@ -10,7 +10,8 @@
 #   make validate OUTDIR=...                      결과 CSV 전부 스키마 검증
 #   make summarize PROBE=kprobe OUTDIR=...         bootstrap CI 요약 출력 (probe 1종)
 #   make compare A_PROBE=none B_PROBE=kprobe OUTDIR=...   두 조건 Mann-Whitney U 비교
-#   make report OUTDIR=...                        5종 전체 요약 + baseline 대비 비교를 .xlsx 하나로
+#   make report SYSTEM=duckdb                     5종 전체 요약 + baseline 대비 비교를 .xlsx 하나로
+#                                                  (OUTDIR은 SYSTEM에서 자동 계산, 커스텀 경로 쓸 때만 직접 지정)
 #   make clean                                    빌드 산출물만 삭제 (결과 CSV는 안 건드림)
 #
 # run/run-all은 내부에서 run_group_a1.sh를 호출한다. 스크립트 전체가 root로 도는 게 아니라
@@ -79,15 +80,16 @@ compare:
 		--a "$(OUTDIR)/raw/$(A_PROBE)/*.txt" --b "$(OUTDIR)/raw/$(B_PROBE)/*.txt" --metric $(METRIC)
 
 # 5종(none/kprobe/fentry/tracepoint/raw_tracepoint) 전체를 summary/vs_none 두 시트로 묶은 .xlsx 생성
-report:
-	python3 report_xlsx.py --outdir $(OUTDIR)
+# (파일명은 systems/README.md 압축 파일명 규칙과 맞춘 ebpf-rdbms-overhead_<system>_groupA_<날짜>_<host>.xlsx)
+report: check-system
+	python3 report_xlsx.py --outdir $(OUTDIR) --system $(SYSTEM)
 
 # 소규모로 5종 전부 실행 + 스키마 검증 + 전체 요약 리포트(.xlsx)까지 한 번에 끝내는 원클릭 타겟.
 # 처음 이 harness를 직접 돌려서 검증해볼 때 이것부터 실행할 것.
 smoke-test: check-system
 	$(MAKE) run-all SYSTEM=$(SYSTEM) REPS=$(TEST_REPS) N=$(TEST_N) OUTDIR=$(TEST_OUTDIR)
 	$(MAKE) validate OUTDIR=$(TEST_OUTDIR)
-	$(MAKE) report OUTDIR=$(TEST_OUTDIR)
+	$(MAKE) report SYSTEM=$(SYSTEM) OUTDIR=$(TEST_OUTDIR)
 	@echo "스모크 테스트 통과 — 결과: $(TEST_OUTDIR)"
 
 clean:
