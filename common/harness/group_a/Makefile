@@ -12,6 +12,11 @@
 #   make compare A_PROBE=none B_PROBE=kprobe OUTDIR=...   두 조건 Mann-Whitney U 비교
 #   make report SYSTEM=duckdb                     5종 전체 요약 + baseline 대비 비교를 .xlsx 하나로
 #                                                  (OUTDIR은 SYSTEM에서 자동 계산, 커스텀 경로 쓸 때만 직접 지정)
+#   make ambient-compare SYSTEM=duckdb TOP_N=2 \
+#        AMBIENTS="duckdb=../../../systems/duckdb/results/group_a_ambient_duckdb"
+#                                                  A-2: A-1 floor 대 배경상태별 결과를 probe×배경×metric별 CSV로 비교
+#                                                  (probe는 TOP_N=<N>으로 A-1 none 대비 p99 overhead_pct 상위 N개 자동 선택,
+#                                                   또는 PROBES="kprobe fentry"로 직접 지정 — 둘 중 하나만)
 #   make clean                                    빌드 산출물만 삭제 (결과 CSV는 안 건드림)
 #
 # run/run-all은 내부에서 run_group_a1.sh를 호출한다. 스크립트 전체가 root로 도는 게 아니라
@@ -34,11 +39,17 @@ A_PROBE ?= none
 B_PROBE ?= kprobe
 METRIC ?= p99
 
+FLOOR_OUTDIR ?= ../../../systems/$(SYSTEM)/results/group_a
+PROBES ?=
+TOP_N ?=
+AMBIENTS ?=
+AMBIENT_OUTPUT ?= $(FLOOR_OUTDIR)/ambient_compare.csv
+
 TEST_REPS := 3
 TEST_N := 100000
 TEST_OUTDIR := ../../../scratch/a1_smoke_test
 
-.PHONY: all build check-system check-probe run run-all validate summarize compare smoke-test clean
+.PHONY: all build check-system check-probe check-probes check-ambients run run-all validate summarize compare ambient-compare smoke-test clean
 
 all: build
 
@@ -55,6 +66,22 @@ check-system:
 check-probe:
 	@if [ -z "$(PROBE)" ]; then \
 		echo "PROBE를 지정하세요 (none/kprobe/fentry/tracepoint/raw_tracepoint). 예: make run SYSTEM=duckdb PROBE=kprobe" >&2; \
+		exit 1; \
+	fi
+
+check-probes:
+	@if [ -z "$(PROBES)" ] && [ -z "$(TOP_N)" ]; then \
+		echo 'PROBES 또는 TOP_N 중 하나를 지정하세요 (동시 사용 불가). 예: PROBES="kprobe fentry" 또는 TOP_N=2(A-1 none 대비 p99 overhead_pct 상위 N개 자동 선택)' >&2; \
+		exit 1; \
+	fi
+	@if [ -n "$(PROBES)" ] && [ -n "$(TOP_N)" ]; then \
+		echo 'PROBES와 TOP_N을 동시에 지정할 수 없습니다.' >&2; \
+		exit 1; \
+	fi
+
+check-ambients:
+	@if [ -z "$(AMBIENTS)" ]; then \
+		echo 'AMBIENTS를 지정하세요 (공백구분 이름=결과디렉토리). 예: AMBIENTS="duckdb=../../../systems/duckdb/results/group_a_ambient_duckdb"' >&2; \
 		exit 1; \
 	fi
 
@@ -83,6 +110,16 @@ compare:
 # (파일명은 systems/README.md 압축 파일명 규칙과 맞춘 ebpf-rdbms-overhead_<system>_groupA_<날짜>_<host>.xlsx)
 report: check-system
 	python3 report_xlsx.py --outdir $(OUTDIR) --system $(SYSTEM)
+
+# A-2: A-1 floor(FLOOR_OUTDIR, 기본은 SYSTEM의 A-1 OUTDIR) 대 배경상태별 결과(AMBIENTS)를
+# PROBES(공백구분, A-1에서 차이 가장 컸던 1~2종)마다 비교해 probe×배경×metric별 한 행짜리 CSV로 낸다.
+# 배경상태별 raw는 A-1과 절대 같은 outdir을 쓰면 안 된다(run000.txt가 덮어써짐) — 배경상태별로
+# --outdir을 따로 지정해서 run_group_a1.sh로 미리 실행해둔 결과 디렉토리를 AMBIENTS에 넘긴다.
+ambient-compare: check-system check-probes check-ambients
+	python3 ambient_compare.py --floor-outdir $(FLOOR_OUTDIR) \
+		$(if $(TOP_N),--top-n $(TOP_N),$(foreach p,$(PROBES),--probe $(p))) \
+		$(foreach a,$(AMBIENTS),--ambient $(a)) \
+		--output $(AMBIENT_OUTPUT)
 
 # 소규모로 5종 전부 실행 + 스키마 검증 + 전체 요약 리포트(.xlsx)까지 한 번에 끝내는 원클릭 타겟.
 # 처음 이 harness를 직접 돌려서 검증해볼 때 이것부터 실행할 것.
