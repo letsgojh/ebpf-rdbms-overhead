@@ -31,7 +31,18 @@ sys.path.insert(0, str(HERE.parent))  # bootstrap_ci.py는 common/harness/ (한 
 from bootstrap_ci import per_run_metrics  # noqa: E402  (mean/p50/p99/p999 재사용)
 
 PROBES_DIR = HERE.parent.parent / "probes"  # common/harness/group_a -> common/probes
+PINNED_CORES_CONF = HERE.parent.parent / "env" / "pinned_cores.conf"  # common/env/pinned_cores.conf
 PIN_DIR = Path("/sys/fs/bpf")
+
+
+def pinned_cores() -> str | None:
+    """common/env/pin_cores.sh가 써둔 코어 목록("2,3" 등)을 읽는다. IRQ affinity를 그 코어들에서
+    치워놔도 harness_floor 자체를 그 코어에 taskset으로 묶어두지 않으면 스케줄러가 아무 코어에나
+    올릴 수 있어 환경 통제가 무의미해진다 — 그래서 있으면 반드시 taskset으로 감싸서 실행한다."""
+    if not PINNED_CORES_CONF.exists():
+        return None
+    cores = PINNED_CORES_CONF.read_text().strip()
+    return cores or None
 
 PROBE_OBJ = {
     "kprobe": "kprobe_empty.bpf.o",
@@ -121,9 +132,12 @@ def kernel_version() -> str:
     return _run(["uname", "-r"]).strip()
 
 
-def run_one_rep(harness: Path, n: int, raw_path: Path, pin_path: Path | None) -> dict:
+def run_one_rep(harness: Path, n: int, raw_path: Path, pin_path: Path | None, cores: str | None) -> dict:
     before = bpf_stats(pin_path) if pin_path else (None, None)
-    _run([str(harness), str(n), str(raw_path)])
+    cmd = [str(harness), str(n), str(raw_path)]
+    if cores:
+        cmd = ["taskset", "-c", cores] + cmd
+    _run(cmd)
     after = bpf_stats(pin_path) if pin_path else (None, None)
 
     metrics = per_run_metrics([raw_path])  # ns 단위, harness_floor가 TSC->ns 환산해서 덤프
@@ -156,6 +170,13 @@ def main() -> int:
         print(f"[ERROR] harness 실행파일 없음: {args.harness} (common/harness/group_a에서 `make build`로 먼저 빌드)", file=sys.stderr)
         return 1
 
+    cores = pinned_cores()
+    if cores:
+        print(f"harness를 taskset -c {cores}로 고정 실행합니다 (common/env/pinned_cores.conf)", file=sys.stderr)
+    else:
+        print("[WARN] common/env/pinned_cores.conf 없음 — harness가 코어에 고정되지 않은 채 실행됩니다"
+              " (common/env에서 `make setup` 먼저 실행 권장)", file=sys.stderr)
+
     raw_dir = args.outdir / "raw" / args.probe_type
     raw_dir.mkdir(parents=True, exist_ok=True)
 
@@ -165,7 +186,7 @@ def main() -> int:
         k_version = kernel_version()
         for run_id in range(args.reps):
             raw_path = raw_dir / f"run{run_id:03d}.txt"
-            result = run_one_rep(args.harness, args.n, raw_path, pin_path)
+            result = run_one_rep(args.harness, args.n, raw_path, pin_path, cores)
 
             row = {name: None for name in CSV_FIELDS}
             row.update({

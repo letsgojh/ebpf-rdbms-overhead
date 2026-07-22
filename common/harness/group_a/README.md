@@ -82,6 +82,14 @@ probe 하나(또는 baseline `none`)를 attach하고 `harness_floor`를 `--reps`
 run별 CSV를 만드는 오케스트레이션. A-1 "측정 절차"(118~124행) 그대로: probe 부착 → harness
 반복 실행 → `bpftool prog show`로 `run_time_ns`/`run_cnt` 기록.
 
+**`common/env/pinned_cores.conf`가 있으면 `harness_floor`를 `taskset -c <코어목록>`으로 감싸서
+실행한다.** `common/env/pin_cores.sh`가 IRQ만 그 코어들에서 치워둘 뿐 어떤 프로세스도 실제로
+pinning하지 않아서(그 시점엔 아직 harness가 없었으므로), 처음엔 이 스크립트가 그걸 빼먹고 있었다
+— 환경 통제(governor/turbo/cstate/IRQ affinity/SMT 차단)를 다 해놔도 정작 측정 프로세스가
+아무 코어에나 스케줄될 수 있어 의미가 없었던 것. 이제 `pinned_cores.conf`가 있으면 자동으로
+`taskset`을 붙이고, 없으면 경고를 찍고 코어 고정 없이 진행한다(`common/env`에서 `make setup`을
+먼저 실행하라는 안내와 함께).
+
 `/sys/fs/bpf`가 `root:root` 700(sticky)이라 pin 생성/삭제·조회(`bpftool prog load`,
 `bpftool link/prog show`, 그 pin 경로의 `rm`)만 root가 필요하다 — **스크립트 전체를 sudo로 감싸지
 않는다.** `attach_probe()`/`detach_probe()`/`bpf_stats()` 안에서 그 호출들에만 개별적으로 `sudo`를
