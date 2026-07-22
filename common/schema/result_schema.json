@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/ebpf-rdbms-overhead/common/schema/result_schema.json",
+  "title": "eBPF RDBMS Overhead — 결과 CSV 공통 스키마",
+  "description": "docs/01_experiment_design.md 0.1절 표와 1:1 대응한다. results/<group>/*.csv 및 results_aggregated/**/*.csv 로 올리는 모든 CSV 행(row)은 이 스키마를 만족해야 한다. 공동 작업의 유일 접점이므로(README 참조) 수정 시 반드시 PR 리뷰를 거친다.",
+  "type": "object",
+  "required": [
+    "system",
+    "group",
+    "sub_experiment",
+    "probe_type",
+    "run_id",
+    "kernel_version",
+    "system_version_hash",
+    "timestamp"
+  ],
+  "properties": {
+    "system": {
+      "type": "string",
+      "enum": ["duckdb", "postgresql", "mysql", "clickhouse", "umbra"],
+      "description": "측정 대상 DB 시스템"
+    },
+    "group": {
+      "type": "string",
+      "enum": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"],
+      "description": "실험 그룹 (Group A~J)"
+    },
+    "sub_experiment": {
+      "type": "string",
+      "description": "A-1, A-2, B-scale 등 하위 실험 식별자"
+    },
+    "probe_type": {
+      "type": "string",
+      "enum": ["none", "kprobe", "kretprobe", "fentry", "fexit", "tracepoint", "raw_tracepoint"],
+      "description": "부착한 eBPF probe 종류. 미계측(baseline)은 none"
+    },
+    "probe_location": {
+      "type": ["string", "null"],
+      "enum": ["query", "operator", "chunk", "tuple", null],
+      "description": "Group B 전용. 해당 없으면(Group A 등) null"
+    },
+    "sf": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "스케일 팩터(TPC-H SF). 해당 없으면 null"
+    },
+    "run_id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "0-indexed 반복 번호"
+    },
+    "throughput_qps": {
+      "type": ["number", "null"],
+      "description": "원시 처리량(query/sec)"
+    },
+    "throughput_degradation_pct": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "(baseline−측정값)/baseline × 100, 항상 양수"
+    },
+    "latency_p50_ms": { "type": ["number", "null"], "minimum": 0 },
+    "latency_p95_ms": { "type": ["number", "null"], "minimum": 0 },
+    "latency_p99_ms": { "type": ["number", "null"], "minimum": 0 },
+    "latency_p999_ms": { "type": ["number", "null"], "minimum": 0 },
+    "latency_overhead_p50_pct": { "type": ["number", "null"], "minimum": 0 },
+    "latency_overhead_p95_pct": { "type": ["number", "null"], "minimum": 0 },
+    "latency_overhead_p99_pct": { "type": ["number", "null"], "minimum": 0 },
+    "latency_overhead_p999_pct": { "type": ["number", "null"], "minimum": 0 },
+    "cpu_overhead_pct": {
+      "type": ["number", "null"],
+      "description": "task-clock 델타 기반 CPU 오버헤드(%)"
+    },
+    "run_time_ns": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "bpf_stats (Tier 2, 해당 시)"
+    },
+    "run_cnt": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "bpf_stats (Tier 2, 해당 시)"
+    },
+    "cycles": { "type": ["number", "null"], "minimum": 0, "description": "perf stat (Tier 2)" },
+    "instructions": { "type": ["number", "null"], "minimum": 0, "description": "perf stat (Tier 2)" },
+    "ipc": { "type": ["number", "null"], "minimum": 0, "description": "perf stat (Tier 2)" },
+    "cache_miss": { "type": ["number", "null"], "minimum": 0, "description": "perf stat (Tier 2)" },
+    "dtlb_miss": { "type": ["number", "null"], "minimum": 0, "description": "perf stat (Tier 2)" },
+    "ctx_switch": { "type": ["number", "null"], "minimum": 0, "description": "perf stat (Tier 2)" },
+    "kernel_version": {
+      "type": "string",
+      "description": "재현성용 커널 버전 (uname -r)"
+    },
+    "system_version_hash": {
+      "type": "string",
+      "description": "재현성용 DB 빌드 버전/커미트 해시"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "실행 시각, ISO8601"
+    }
+  },
+  "additionalProperties": true
+}
