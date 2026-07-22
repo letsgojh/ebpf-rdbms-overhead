@@ -1,0 +1,18 @@
+# 로컬 산출물 — README "디렉토리 구조" 기준 git-ignore 대상
+systems/*/results/
+common/env/pinned_cores.conf
+
+# 스모크테스트 등 disposable 산출물 — 진짜 결과(systems/*/results/)와 섞이지 않게 분리
+scratch/
+
+# 빌드 산출물
+*.o
+*.bpf.o
+*.ko
+*.skel.h
+common/probes/vmlinux.h
+common/harness/group_a/harness_floor
+__pycache__/
+
+# OS/에디터
+.DS_Store
