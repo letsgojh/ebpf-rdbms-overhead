@@ -60,13 +60,14 @@ cat README.md          # 이 시스템 전용 실행 방법
 bash setup/install.sh  # 버전 고정 빌드 (없으면 새로 작성)
 ```
 
-공통 환경 통제(코어 pinning, turbo/cstate 비활성화)는 실험 시작 전 매번 아래를 실행합니다:
+공통 환경 통제(코어 pinning, turbo/cstate 비활성화)는 재부팅할 때마다(설정이 런타임 값이라 재부팅
+시 초기화됨) 실험 시작 전 매번 실행합니다:
 
 ```bash
-bash ../../common/env/set_cpu_governor.sh
-bash ../../common/env/disable_turbo_cstate.sh
-bash ../../common/env/pin_cores.sh
+make -C ../../common/env setup                # 3개 스크립트를 순서대로 실행 (기본 코어 2,3)
+make -C ../../common/env setup CORES=4,5      # 코어 목록을 바꾸고 싶을 때
 ```
+개별 스크립트를 손으로 하나씩 돌리려면 `common/env/README.md` 참고.
 
 ## 협업 워크플로우
 
