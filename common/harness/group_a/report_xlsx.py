@@ -21,7 +21,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from bootstrap_ci import METRICS, compare, summarize  # noqa: E402
+from bootstrap_ci import METRICS, compare_metrics, per_run_metrics, summarize_metrics  # noqa: E402
 
 PROBE_TYPES = ["none", "kprobe", "fentry", "tracepoint", "raw_tracepoint"]
 
@@ -31,14 +31,29 @@ def _raw_paths(outdir: Path, probe_type: str) -> list[Path]:
     return sorted(d.glob("*.txt")) if d.is_dir() else []
 
 
-def build_summary_df(outdir: Path, n_resamples: int, seed) -> pd.DataFrame:
-    rows = []
+def _load_metrics_by_probe(outdir: Path) -> dict[str, dict | None]:
+    """probe_type별 raw 파일을 한 번씩만 읽어 metric 배열을 계산한다.
+
+    summary/vs_none 두 시트가 probe_type별 raw 데이터를 공유하는데, 예전엔 vs_none 시트가
+    metric(4종) × probe_type(4종)마다 compare()를 새로 호출해 같은 raw 파일(반복당 최대
+    10^7줄)을 최대 16번씩 다시 읽었다. raw 전체가 수십 GB라 이게 리포트 생성 시간의 대부분을
+    차지했으므로, probe_type당 한 번만 읽어서 재사용한다.
+    """
+    result: dict[str, dict | None] = {}
     for probe_type in PROBE_TYPES:
         paths = _raw_paths(outdir, probe_type)
-        if not paths:
+        result[probe_type] = per_run_metrics(paths) if paths else None
+    return result
+
+
+def build_summary_df(metrics_by_probe: dict[str, dict | None], n_resamples: int, seed) -> pd.DataFrame:
+    rows = []
+    for probe_type in PROBE_TYPES:
+        metrics = metrics_by_probe[probe_type]
+        if metrics is None:
             rows.append({"probe_type": probe_type, "n_runs": 0, "note": "raw 데이터 없음"})
             continue
-        stats = summarize(paths, n_resamples=n_resamples, random_state=seed)
+        stats = summarize_metrics(metrics, n_resamples=n_resamples, random_state=seed)
         row = {"probe_type": probe_type, "n_runs": stats["mean"]["n_runs"]}
         for metric in METRICS:
             row[f"{metric}_ns"] = round(stats[metric]["point"], 3)
@@ -48,21 +63,24 @@ def build_summary_df(outdir: Path, n_resamples: int, seed) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_vs_baseline_df(outdir: Path, n_resamples: int, seed) -> pd.DataFrame:
-    baseline_paths = _raw_paths(outdir, "none")
+def build_vs_baseline_df(metrics_by_probe: dict[str, dict | None], n_resamples: int, seed) -> pd.DataFrame:
+    baseline_metrics = metrics_by_probe["none"]
     rows = []
     for probe_type in PROBE_TYPES:
         if probe_type == "none":
             continue
-        paths = _raw_paths(outdir, probe_type)
+        probe_metrics = metrics_by_probe[probe_type]
         for metric in METRICS:
-            if not baseline_paths or not paths:
+            if baseline_metrics is None or probe_metrics is None:
                 rows.append({
                     "probe_type": probe_type, "metric": metric,
                     "note": "raw 데이터 없음(none 또는 이 probe_type을 아직 안 돌림)",
                 })
                 continue
-            result = compare(baseline_paths, paths, metric=metric, random_state=seed, n_resamples=n_resamples)
+            result = compare_metrics(
+                baseline_metrics[metric], probe_metrics[metric], metric=metric,
+                random_state=seed, n_resamples=n_resamples,
+            )
             baseline_point = result["ci_a"]["point"]
             probe_point = result["ci_b"]["point"]
             rows.append({
@@ -105,8 +123,9 @@ def main() -> int:
         host = socket.gethostname()
         output = outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_{stamp}_{host}.xlsx"
 
-    summary_df = build_summary_df(outdir, args.n_resamples, args.seed)
-    vs_baseline_df = build_vs_baseline_df(outdir, args.n_resamples, args.seed)
+    metrics_by_probe = _load_metrics_by_probe(outdir)
+    summary_df = build_summary_df(metrics_by_probe, args.n_resamples, args.seed)
+    vs_baseline_df = build_vs_baseline_df(metrics_by_probe, args.n_resamples, args.seed)
 
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         summary_df.to_excel(writer, sheet_name="summary", index=False)

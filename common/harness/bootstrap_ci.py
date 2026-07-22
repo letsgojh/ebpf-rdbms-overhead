@@ -84,6 +84,23 @@ def bootstrap_ci(
     }
 
 
+def summarize_metrics(
+    metrics: dict[str, np.ndarray],
+    confidence_level: float = 0.95,
+    n_resamples: int = 10000,
+    random_state=None,
+) -> dict[str, dict]:
+    """per_run_metrics()가 이미 계산해둔 metric별 run 통계치 배열에 bootstrap CI를 적용한다.
+
+    raw 파일을 이미 읽어둔 호출자(예: report_xlsx.py — 같은 probe_type을 summary/vs_none
+    양쪽에서 쓴다)가 파일을 다시 읽지 않고 재사용할 수 있도록 summarize()에서 분리해뒀다.
+    """
+    return {
+        name: bootstrap_ci(vals, confidence_level, n_resamples, random_state=random_state)
+        for name, vals in metrics.items()
+    }
+
+
 def summarize(
     paths: list[Path],
     confidence_level: float = 0.95,
@@ -92,9 +109,34 @@ def summarize(
 ) -> dict[str, dict]:
     """조건 하나(예: 특정 probe family)의 run 파일들에서 mean/P50/P99/P999 + 95% CI를 낸다."""
     metrics = per_run_metrics(paths)
+    return summarize_metrics(metrics, confidence_level, n_resamples, random_state=random_state)
+
+
+def compare_metrics(
+    values_a: np.ndarray,
+    values_b: np.ndarray,
+    metric: str = "mean",
+    alpha: float = 0.05,
+    n_resamples: int = 10000,
+    random_state=None,
+) -> dict:
+    """두 조건의, 이미 계산된 metric 1개짜리 run별 통계치 배열을 비교한다(파일 재로딩 없음).
+
+    A-1 "family 간 차이 검정" 절: 분포가 정규분포가 아닐 수 있어 Mann-Whitney U를 쓰고,
+    보조적으로 두 조건 각각의 bootstrap CI가 겹치는지도 같이 본다.
+    """
+    u_stat, p_value = stats.mannwhitneyu(values_a, values_b, alternative="two-sided")
+    ci_a = bootstrap_ci(values_a, 1 - alpha, n_resamples, random_state=random_state)
+    ci_b = bootstrap_ci(values_b, 1 - alpha, n_resamples, random_state=random_state)
+    ci_overlap = not (ci_a["ci_high"] < ci_b["ci_low"] or ci_b["ci_high"] < ci_a["ci_low"])
     return {
-        name: bootstrap_ci(vals, confidence_level, n_resamples, random_state=random_state)
-        for name, vals in metrics.items()
+        "metric": metric,
+        "mannwhitney_u": float(u_stat),
+        "p_value": float(p_value),
+        "significant": bool(p_value < alpha),
+        "ci_a": ci_a,
+        "ci_b": ci_b,
+        "ci_overlap": ci_overlap,
     }
 
 
@@ -106,28 +148,12 @@ def compare(
     n_resamples: int = 10000,
     random_state=None,
 ) -> dict:
-    """두 조건(probe family A vs B 등)을 Mann-Whitney U + CI 비겹침으로 비교한다.
-
-    A-1 "family 간 차이 검정" 절: 분포가 정규분포가 아닐 수 있어 Mann-Whitney U를 쓰고,
-    보조적으로 두 조건 각각의 bootstrap CI가 겹치는지도 같이 본다.
-    """
+    """두 조건(probe family A vs B 등)을 Mann-Whitney U + CI 비겹침으로 비교한다."""
     if metric not in METRICS:
         raise ValueError(f"알 수 없는 metric: {metric} (선택 가능: {list(METRICS)})")
     a = per_run_metrics(paths_a)[metric]
     b = per_run_metrics(paths_b)[metric]
-    u_stat, p_value = stats.mannwhitneyu(a, b, alternative="two-sided")
-    ci_a = bootstrap_ci(a, 1 - alpha, n_resamples, random_state=random_state)
-    ci_b = bootstrap_ci(b, 1 - alpha, n_resamples, random_state=random_state)
-    ci_overlap = not (ci_a["ci_high"] < ci_b["ci_low"] or ci_b["ci_high"] < ci_a["ci_low"])
-    return {
-        "metric": metric,
-        "mannwhitney_u": float(u_stat),
-        "p_value": float(p_value),
-        "significant": bool(p_value < alpha),
-        "ci_a": ci_a,
-        "ci_b": ci_b,
-        "ci_overlap": ci_overlap,
-    }
+    return compare_metrics(a, b, metric, alpha, n_resamples, random_state=random_state)
 
 
 def _expand_paths(patterns: list[str]) -> list[Path]:
