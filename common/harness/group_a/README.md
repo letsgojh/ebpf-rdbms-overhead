@@ -164,22 +164,30 @@ A-1 floor(배경 DB 없음)와 배경 DB를 idle로 띄운 채 다시 측정한 
 안에서 probe_type vs none"만 비교하므로, "같은 probe_type을 outdir이 다른 두 조건(배경
 있음/없음)"으로 비교하는 A-2에는 못 쓴다 — 그래서 별도 스크립트로 뺐다.
 
+**모든 단계는 시스템(서버)별로 각자 돌린다.** `systems/<system>/results/`는 git-ignore라
+서버 4곳(gaia1/2/3/5)에 있는 raw 데이터는 서로 안 보인다 — 담당자가 자기 서버에서 자기 시스템에
+대해 아래 0~2단계를 반복하면 되고, 서버 간에 데이터를 합칠 필요는 없다(A-2 비교 자체가 "같은
+시스템의 A-1 floor vs A-2 ambient"라 시스템별로 순위·선택 probe가 달라도 문제 없음).
+
 **0단계 — probe 축소 (비용 절감).** A-2는 5종 전부 다시 돌리지 않고, A-1에서 family 간 차이가
 가장 컸던 1~2종만 배경상태별로 재실행한다. "차이가 가장 컸다"를 사람이 report.xlsx를 보고 눈으로
 고르는 대신, A-1 floor 데이터에서 직접 계산한다(none 대비 p99 overhead_pct 기준 — p99를 쓰는 건
 mean이 tail 차이를 덮어버리기 때문):
 ```bash
-python3 ambient_compare.py --floor-outdir ../../../systems/duckdb/results/group_a --rank-only
+make rank-probes SYSTEM=duckdb
 ```
 이 순위에서 상위 1~2종(예: kprobe, fentry)을 실제 배경상태별 재실행 대상으로 정한다.
 
 **1단계 — 배경상태별 재실행.** 위에서 고른 probe만, 배경상태(DuckDB/PostgreSQL/MySQL/ClickHouse/
-Umbra idle)별로 A-1과 **똑같은 하네스를 outdir만 다르게** 돌린다(A-1과 같은 outdir을 쓰면
-`run000.txt`가 덮어써진다):
+Umbra idle)별로 A-1과 **똑같은 하네스를 outdir만 다르게** 돌린다:
 ```bash
-bash run_group_a1.sh --system duckdb --probe-type kprobe --reps 100 --n 10000000 \
-    --outdir ../../../systems/duckdb/results/group_a_ambient_duckdb
+make run-ambient SYSTEM=duckdb AMBIENT=duckdb PROBES="kprobe fentry"
 ```
+`AMBIENT`는 배경상태 라벨(자유 문자열)이고, 결과는 `systems/<SYSTEM>/results/group_a_ambient_<AMBIENT>`에
+쌓인다(A-1과 다른 경로라 `run000.txt`가 덮어써질 걱정 없음). **이 타겟은 배경 DB를 이 서버에 idle로
+띄우는 것까지는 대신 해주지 않는다** — 시스템마다 기동 방법이 다르고(`systems/<system>/setup/` 참고)
+담당자도 나뉘어 있어서, 배경 DB(위 예시면 DuckDB)가 idle로 떠 있는 상태를 직접 만들어둔 뒤 실행해야
+한다. 배경상태 개수만큼(`AMBIENT` 값을 바꿔서) 반복한다.
 
 **2단계 — 비교.** 0단계에서 고른 probe를 `PROBES`(직접 지정) 또는 `TOP_N`(자동 선택, 0단계와
 동일한 계산을 다시 해서 상위 N개를 고름 — 결과는 항상 같음)으로 넘긴다:
@@ -190,14 +198,16 @@ make ambient-compare SYSTEM=duckdb TOP_N=2 \
 make ambient-compare SYSTEM=duckdb PROBES="kprobe fentry" AMBIENTS="..."
 ```
 `FLOOR_OUTDIR`(기본 `systems/<SYSTEM>/results/group_a`, A-1 결과) 대 `AMBIENTS`로 넘긴 배경상태별
-outdir을 비교해, probe_type × 배경 × metric(4종) 조합별로 한 행씩인 `ambient_compare.csv`를 낸다
-(기본 위치는 `FLOOR_OUTDIR/ambient_compare.csv`). raw 파일은 조건(floor 1개 + 배경 N개)당 한 번만
-읽고 metric 4개 비교에 재사용한다 — `bootstrap_ci.py compare`를 metric마다 CLI로 따로 부르면
-같은 raw를 최대 4번씩 다시 읽게 되므로 그렇게 하지 않는다.
+outdir(1단계가 쌓아둔 `group_a_ambient_<AMBIENT>` 경로들)을 비교해, probe_type × 배경 × metric(4종)
+조합별로 한 행씩인 `ambient_compare.csv`를 낸다(기본 위치는 `FLOOR_OUTDIR/ambient_compare.csv`).
+raw 파일은 조건(floor 1개 + 배경 N개)당 한 번만 읽고 metric 4개 비교에 재사용한다 —
+`bootstrap_ci.py compare`를 metric마다 CLI로 따로 부르면 같은 raw를 최대 4번씩 다시 읽게 되므로
+그렇게 하지 않는다.
 
 **해석 기준(A-2):** 한 행의 `ci_overlap=True`면 그 probe_type·배경 조합은 "메커니즘 비용이 DB
 존재와 무관"을 지지. `False`면 `diff_ns`/`diff_pct`로 그 배경이 얼마나 영향을 주는지 정량화.
 
 ### `Makefile`
-`build`/`smoke-test`/`run`/`run-all`/`validate`/`summarize`/`compare`/`report`/`ambient-compare`/`clean` 타겟으로
-위 과정 전체를 감싼 진입점. `SYSTEM`/`PROBE`/`REPS`/`N`/`OUTDIR` 등은 `make VAR=값 타겟`으로 넘긴다.
+`build`/`smoke-test`/`run`/`run-all`/`validate`/`summarize`/`compare`/`report`/`rank-probes`/
+`run-ambient`/`ambient-compare`/`clean` 타겟으로 위 과정 전체를 감싼 진입점. `SYSTEM`/`PROBE`/
+`REPS`/`N`/`OUTDIR` 등은 `make VAR=값 타겟`으로 넘긴다.
