@@ -178,8 +178,10 @@ make rank-probes SYSTEM=duckdb
 ```
 콘솔에 순위를 출력하고, `systems/README.md` 압축 파일명 규칙과 맞춘
 `FLOOR_OUTDIR/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx`도 같이 생성한다
-(같은 디렉토리의 `report.xlsx`와 이름이 겹치지 않도록 `ambientrank` 태그를 붙임). 이 순위에서
-상위 1~2종(예: kprobe, fentry)을 실제 배경상태별 재실행 대상으로 정한다.
+(같은 디렉토리의 `report.xlsx`와 이름이 겹치지 않도록 `ambientrank` 태그를 붙임). `rank` 시트에는
+`overhead_pct`뿐 아니라 실제 절대 수치(`none_ns`/`probe_ns`/`overhead_ns`, 각각 CI 포함)와
+Mann-Whitney U/p-value/유의성/CI 비겹침까지 다 들어있다 — %만 보여주면 안 된다는 피드백을 받은
+경우를 위함. 이 순위에서 상위 1~2종(예: kprobe, fentry)을 실제 배경상태별 재실행 대상으로 정한다.
 
 **1단계 — 배경상태별 재실행.** 위에서 고른 probe만, 배경상태(DuckDB/PostgreSQL/MySQL/ClickHouse/
 Umbra idle)별로 A-1과 **똑같은 하네스를 outdir만 다르게** 돌린다:

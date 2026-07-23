@@ -53,11 +53,14 @@ def _parse_ambient(spec: str) -> tuple[str, Path]:
     return name, Path(path)
 
 
-def select_top_probes(floor_outdir: Path, top_n: int, n_resamples: int, seed) -> list[tuple[str, float]]:
-    """A-1 floor에서 none 대비 RANK_METRIC(p99) overhead_pct가 큰 순으로 정렬한 (probe_type, pct) 목록.
+def select_top_probes(floor_outdir: Path, top_n: int, n_resamples: int, seed) -> list[dict]:
+    """A-1 floor에서 none 대비 RANK_METRIC(p99) overhead_pct가 큰 순으로 정렬한 목록.
 
     01_experiment_design.md A-2: "probe family는 A-1에서 family 간 차이가 가장 컸던 1~2종으로
     축소" — 이 선택을 사람이 report.xlsx를 보고 눈으로 고르는 대신 floor 데이터에서 직접 계산한다.
+
+    percent만으로는 실제 절대 수치(ns)를 알 수 없어 보고용으로 부족하므로, 각 probe_type의
+    none/probe 절대값(ns, CI)과 Mann-Whitney U/유의성까지 함께 반환한다.
     """
     baseline_paths = _raw_paths(floor_outdir, "none")
     if not baseline_paths:
@@ -74,14 +77,29 @@ def select_top_probes(floor_outdir: Path, top_n: int, n_resamples: int, seed) ->
             baseline_metrics[RANK_METRIC], probe_metrics[RANK_METRIC], metric=RANK_METRIC,
             random_state=seed, n_resamples=n_resamples,
         )
-        baseline_point = result["ci_a"]["point"]
+        none_point = result["ci_a"]["point"]
         probe_point = result["ci_b"]["point"]
-        overhead_pct = (probe_point - baseline_point) / baseline_point * 100 if baseline_point else 0.0
-        ranked.append((probe_type, overhead_pct))
+        overhead_pct = (probe_point - none_point) / none_point * 100 if none_point else 0.0
+        ranked.append({
+            "probe_type": probe_type,
+            "metric": RANK_METRIC,
+            "none_ns": round(none_point, 3),
+            "none_ci_low_ns": round(result["ci_a"]["ci_low"], 3),
+            "none_ci_high_ns": round(result["ci_a"]["ci_high"], 3),
+            "probe_ns": round(probe_point, 3),
+            "probe_ci_low_ns": round(result["ci_b"]["ci_low"], 3),
+            "probe_ci_high_ns": round(result["ci_b"]["ci_high"], 3),
+            "overhead_ns": round(probe_point - none_point, 3),
+            "overhead_pct": round(overhead_pct, 3),
+            "mannwhitney_u": round(result["mannwhitney_u"], 2),
+            "p_value": round(result["p_value"], 6),
+            "significant": result["significant"],
+            "ci_overlap": result["ci_overlap"],
+        })
     if not ranked:
         raise ValueError(f"floor outdir에 비교할 probe_type(kprobe 등) raw가 하나도 없음: {floor_outdir}")
 
-    ranked.sort(key=lambda item: item[1], reverse=True)
+    ranked.sort(key=lambda item: item["overhead_pct"], reverse=True)
     return ranked
 
 
@@ -173,8 +191,12 @@ def main() -> int:
             parser.error("--rank-only에는 --system이 필요합니다 (출력 .xlsx 파일명에 씀)")
         ranked = select_top_probes(args.floor_outdir, len(NON_BASELINE_PROBES), args.n_resamples, args.seed)
         print(f"A-1 floor 기준 none 대비 {RANK_METRIC} overhead_pct 순위:")
-        for probe_type, pct in ranked:
-            print(f"  {probe_type}: {pct:.2f}%")
+        for item in ranked:
+            print(
+                f"  {item['probe_type']}: {item['overhead_pct']:.2f}%  "
+                f"(none={item['none_ns']}ns, {item['probe_type']}={item['probe_ns']}ns, "
+                f"overhead={item['overhead_ns']}ns, p={item['p_value']:.4g})"
+            )
 
         if args.output:
             output = args.output
@@ -182,10 +204,7 @@ def main() -> int:
             stamp = date.today().strftime("%Y%m%d")
             host = socket.gethostname()
             output = args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientrank_{stamp}_{host}.xlsx"
-        rank_df = pd.DataFrame([
-            {"rank": i + 1, "probe_type": probe_type, "metric": RANK_METRIC, "overhead_pct": round(pct, 3)}
-            for i, (probe_type, pct) in enumerate(ranked)
-        ])
+        rank_df = pd.DataFrame([{"rank": i + 1, **item} for i, item in enumerate(ranked)])
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             rank_df.to_excel(writer, sheet_name="rank", index=False)
         print(f"순위 리포트 생성: {output}")
@@ -198,10 +217,10 @@ def main() -> int:
 
     if args.top_n is not None:
         ranked = select_top_probes(args.floor_outdir, args.top_n, args.n_resamples, args.seed)
-        print(f"A-1 floor 기준 none 대비 {RANK_METRIC} overhead_pct 순위: " + ", ".join(f"{p}={pct:.2f}%" for p, pct in ranked))
+        print(f"A-1 floor 기준 none 대비 {RANK_METRIC} overhead_pct 순위: " + ", ".join(f"{item['probe_type']}={item['overhead_pct']:.2f}%" for item in ranked))
         if args.top_n > len(ranked):
             print(f"[경고] top-n={args.top_n}이 floor에 있는 probe_type 수({len(ranked)})보다 큼 — {len(ranked)}개만 선택됨", file=sys.stderr)
-        probes = [p for p, _ in ranked[: args.top_n]]
+        probes = [item["probe_type"] for item in ranked[: args.top_n]]
         print(f"자동 선택된 probe_type(top {args.top_n}): {probes}")
     else:
         probes = args.probes
