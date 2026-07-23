@@ -13,6 +13,8 @@ scratch/
 common/probes/vmlinux.h
 common/harness/group_a/harness_floor
 __pycache__/
+systems/*/setup/idle.pid
+systems/*/setup/idle.log
 
 # OS/에디터
 .DS_Store

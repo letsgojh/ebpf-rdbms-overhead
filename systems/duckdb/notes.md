@@ -39,7 +39,7 @@ H1 가설("tracepoint≈raw_tracepoint < fentry < kprobe")과 다르게 tracepoi
 
 ## Group A-2 — 앰비언트 부하 민감도
 
-**상태: 진행 중** — 0단계 완료, 1단계(배경상태별 재실행) 착수 전
+**상태: 진행 중** — Phase 0~2 완료, Phase 3(배경상태별 재실행) 착수 전
 
 ### Phase 로그
 - [x] Phase 0: 도구 구현 — `common/harness/group_a/ambient_compare.py` + `Makefile`의
@@ -47,17 +47,31 @@ H1 가설("tracepoint≈raw_tracepoint < fentry < kprobe")과 다르게 tracepoi
 - [x] Phase 1: probe 축소 — `make rank-probes SYSTEM=duckdb` 실행 완료. A-1 실데이터 기준(none 대비
       p99 overhead_pct) 상위 2종 확정: **kprobe, tracepoint**
       (결과: `systems/duckdb/results/group_a/ebpf-rdbms-overhead_duckdb_groupA_ambientrank_20260723_gaia1.xlsx`)
-- [ ] Phase 2: 배경상태별 재실행 — **이 서버(gaia1)는 DuckDB 전용이라 실제로 만들 수 있는 배경은
+- [x] Phase 2: **DuckDB 설치/기동** — 이 서버엔 이미 DuckDB CLI(`v1.4.1`, `/home/jhyoo/bin/duckdb`)가
+      설치돼 있어서 새로 빌드할 필요는 없었다. `systems/duckdb/setup/`에 2개 스크립트 작성:
+      - `install.sh`: 버전 확인 + `VERSION.lock` 기록 (DuckDB는 서버 데몬 없는 단일 바이너리라
+        PostgreSQL/MySQL처럼 소스 빌드 불필요 — 배포 파일명이 버전마다 달라서 자동 다운로드는 안 함,
+        없으면 https://duckdb.org/install 안내만 출력)
+      - `idle.sh {start|stop|status} [DB경로]`: A-2용 "DuckDB idle" 배경을 실제로 띄운다. DuckDB엔
+        상시 서버 프로세스가 없어서, stdin을 안 끝나는 파이프(`tail -f /dev/null`)에 연결해 CLI가
+        프롬프트에서 계속 대기하게 만드는 방식으로 흉내낸다. 기본 DB는 유재환의 별도 벤치마크
+        프로젝트에 이미 있는 TPC-H SF100(`/home/jhyoo/DuckDB/TPC-Benchmark-on-DuckDB/TPC_H/
+        tpch_sf100.duckdb`, 27.6GB) — 빈 인메모리 DB보다 실제 데이터 로드된 상태가 배경 부하로
+        더 현실적이라 재사용(`-readonly`로 열어서 원본 파일 안전). 직접 실행해서 시작→`lsof`로 DB
+        파일 열림 확인→정지까지 전부 확인함.
+      - `Makefile`: 위 둘을 `make install`/`make idle-start [DB=...]`/`make idle-stop`/
+        `make idle-status`로 감쌈. 사용법은 `systems/duckdb/README.md` 참고.
+- [ ] Phase 3: 배경상태별 재실행 — **이 서버(gaia1)는 DuckDB 전용이라 실제로 만들 수 있는 배경은
       DuckDB idle뿐이다.** 디렉토리/서버를 시스템별로 나눠서 관리하는 것과 같은 이유로,
       PostgreSQL/MySQL/ClickHouse/Umbra를 이 서버에 따로 설치하지 않는다(아래 "범위" 참고).
       ```bash
       make run-ambient SYSTEM=duckdb AMBIENT=duckdb PROBES="kprobe tracepoint"
       ```
   - [ ] DuckDB idle
-- [ ] Phase 3: 비교 — `make ambient-compare SYSTEM=duckdb TOP_N=2
+- [ ] Phase 4: 비교 — `make ambient-compare SYSTEM=duckdb TOP_N=2
       AMBIENTS="duckdb=../../../systems/duckdb/results/group_a_ambient_duckdb"` 실행 →
       `ambient_compare.csv`
-- [ ] Phase 4: 해석 — 각 행 `ci_overlap`으로 "메커니즘 비용이 DB 존재와 무관인지" 판정, `False`면
+- [ ] Phase 5: 해석 — 각 행 `ci_overlap`으로 "메커니즘 비용이 DB 존재와 무관인지" 판정, `False`면
       `diff_ns`/`diff_pct`로 어떤 배경이 얼마나 영향 주는지 정리
 
 ### 범위 (이 트랙에서 안 하는 것)
@@ -67,8 +81,3 @@ PostgreSQL/MySQL/ClickHouse/Umbra는 없다. 그래서 이 트랙(duckdb, gaia1)
 하나만** 재본다. 나머지 배경(PostgreSQL/MySQL/ClickHouse/Umbra idle)을 어떻게 처리할지(각자 담당
 서버에서 자기 시스템 기준으로 따로 돌릴지, 아예 스코프에서 뺄지)는 팀 차원의 별도 결정 사항이지
 이 노트/이 서버가 막고 있는 게 아니다.
-
-### 막힌 것 / 확인 필요
-- [ ] `systems/duckdb/setup/`가 비어있어서 "DuckDB idle" 자체를 아직 실제로 못 띄움 — Phase 2
-      시작 전에 DuckDB를 이 서버에 빌드/기동하는 절차부터 필요(최상위 README "시작하기" 참고,
-      `setup/install.sh` 아직 미작성)
