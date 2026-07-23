@@ -176,7 +176,10 @@ mean이 tail 차이를 덮어버리기 때문):
 ```bash
 make rank-probes SYSTEM=duckdb
 ```
-이 순위에서 상위 1~2종(예: kprobe, fentry)을 실제 배경상태별 재실행 대상으로 정한다.
+콘솔에 순위를 출력하고, `systems/README.md` 압축 파일명 규칙과 맞춘
+`FLOOR_OUTDIR/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx`도 같이 생성한다
+(같은 디렉토리의 `report.xlsx`와 이름이 겹치지 않도록 `ambientrank` 태그를 붙임). 이 순위에서
+상위 1~2종(예: kprobe, fentry)을 실제 배경상태별 재실행 대상으로 정한다.
 
 **1단계 — 배경상태별 재실행.** 위에서 고른 probe만, 배경상태(DuckDB/PostgreSQL/MySQL/ClickHouse/
 Umbra idle)별로 A-1과 **똑같은 하네스를 outdir만 다르게** 돌린다:
