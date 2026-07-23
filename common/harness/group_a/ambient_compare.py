@@ -19,8 +19,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import socket
 import sys
+from datetime import date
 from pathlib import Path
+
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bootstrap_ci import METRICS, compare_metrics, per_run_metrics  # noqa: E402
@@ -132,8 +136,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--floor-outdir", type=Path, required=True, help="A-1 결과 디렉토리 (배경 없음 baseline)")
     parser.add_argument(
+        "--system", choices=["duckdb", "postgresql", "mysql", "clickhouse", "umbra"],
+        help="--rank-only 결과를 .xlsx로 낼 때 systems/README.md 압축 파일명 규칙과 맞추기 위한 시스템 이름 (--rank-only 시 필수)",
+    )
+    parser.add_argument(
         "--rank-only", action="store_true",
-        help="배경 데이터 없이, floor만으로 probe_type별 none 대비 p99 overhead_pct 순위만 출력하고 종료 "
+        help="배경 데이터 없이, floor만으로 probe_type별 none 대비 p99 overhead_pct 순위를 .xlsx로 내고 종료 "
              "(A-2에서 배경상태별로 실제 재실행할 probe_type을 정하기 전에 먼저 확인하는 용도)",
     )
     selector = parser.add_mutually_exclusive_group()
@@ -151,16 +159,36 @@ def main() -> int:
         "--ambient", dest="ambients", action="append", type=_parse_ambient,
         help="배경상태이름=결과디렉토리 (예: duckdb=../../../systems/duckdb/results/group_a_ambient_duckdb). 여러 번 지정 가능",
     )
-    parser.add_argument("--output", type=Path, default=Path("ambient_compare.csv"), help="출력 CSV 경로")
+    parser.add_argument(
+        "--output", type=Path, default=None,
+        help="출력 경로 (--rank-only: 기본 <floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx / "
+             "그 외: 기본 ambient_compare.csv)",
+    )
     parser.add_argument("--n-resamples", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0, help="재현 가능한 비교를 위한 기본 seed(0)")
     args = parser.parse_args()
 
     if args.rank_only:
+        if not args.system:
+            parser.error("--rank-only에는 --system이 필요합니다 (출력 .xlsx 파일명에 씀)")
         ranked = select_top_probes(args.floor_outdir, len(NON_BASELINE_PROBES), args.n_resamples, args.seed)
         print(f"A-1 floor 기준 none 대비 {RANK_METRIC} overhead_pct 순위:")
         for probe_type, pct in ranked:
             print(f"  {probe_type}: {pct:.2f}%")
+
+        if args.output:
+            output = args.output
+        else:
+            stamp = date.today().strftime("%Y%m%d")
+            host = socket.gethostname()
+            output = args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientrank_{stamp}_{host}.xlsx"
+        rank_df = pd.DataFrame([
+            {"rank": i + 1, "probe_type": probe_type, "metric": RANK_METRIC, "overhead_pct": round(pct, 3)}
+            for i, (probe_type, pct) in enumerate(ranked)
+        ])
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            rank_df.to_excel(writer, sheet_name="rank", index=False)
+        print(f"순위 리포트 생성: {output}")
         return 0
 
     if args.probes is None and args.top_n is None:
@@ -180,12 +208,13 @@ def main() -> int:
 
     rows = build_rows(args.floor_outdir, probes, args.ambients, args.n_resamples, args.seed)
 
-    with open(args.output, "w", newline="") as f:
+    output = args.output or Path("ambient_compare.csv")
+    with open(output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES, restval="")
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"비교 결과 생성: {args.output} ({len(rows)}행)")
+    print(f"비교 결과 생성: {output} ({len(rows)}행)")
     return 0
 
 

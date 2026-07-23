@@ -136,7 +136,7 @@ report: check-system
 # A-2 0단계: A-1 floor에서 none 대비 p99 overhead_pct 순위만 확인 — 배경상태별로 재실행할
 # probe 1~2종을 고르는 근거(ambient_compare.py --rank-only 그대로).
 rank-probes: check-system
-	python3 ambient_compare.py --floor-outdir $(FLOOR_OUTDIR) --rank-only
+	python3 ambient_compare.py --floor-outdir $(FLOOR_OUTDIR) --system $(SYSTEM) --rank-only
 
 # A-2 1단계: 배경상태(AMBIENT) 라벨 하나에 대해 PROBES(공백구분, 보통 rank-probes 상위 1~2종)를
 # 재실행해 systems/<SYSTEM>/results/group_a_ambient_<AMBIENT>에 raw를 쌓는다.
