@@ -18,7 +18,6 @@ raw 파일(반복당 최대 10^7줄)을 조건(floor 1개 + ambient N개)당 한
 from __future__ import annotations
 
 import argparse
-import csv
 import socket
 import sys
 from datetime import date
@@ -154,8 +153,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--floor-outdir", type=Path, required=True, help="A-1 결과 디렉토리 (배경 없음 baseline)")
     parser.add_argument(
-        "--system", choices=["duckdb", "postgresql", "mysql", "clickhouse", "umbra"],
-        help="--rank-only 결과를 .xlsx로 낼 때 systems/README.md 압축 파일명 규칙과 맞추기 위한 시스템 이름 (--rank-only 시 필수)",
+        "--system", required=True, choices=["duckdb", "postgresql", "mysql", "clickhouse", "umbra"],
+        help="출력 .xlsx 파일명을 systems/README.md 압축 파일명 규칙과 맞추기 위한 시스템 이름",
     )
     parser.add_argument(
         "--rank-only", action="store_true",
@@ -179,16 +178,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--output", type=Path, default=None,
-        help="출력 경로 (--rank-only: 기본 <floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx / "
-             "그 외: 기본 ambient_compare.csv)",
+        help="출력 .xlsx 경로. 기본값은 --rank-only 여부에 따라 "
+             "<floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx 또는 "
+             "<floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientcompare_<날짜>_<host>.xlsx",
     )
     parser.add_argument("--n-resamples", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0, help="재현 가능한 비교를 위한 기본 seed(0)")
     args = parser.parse_args()
 
     if args.rank_only:
-        if not args.system:
-            parser.error("--rank-only에는 --system이 필요합니다 (출력 .xlsx 파일명에 씀)")
         ranked = select_top_probes(args.floor_outdir, len(NON_BASELINE_PROBES), args.n_resamples, args.seed)
         print(f"A-1 floor 기준 none 대비 {RANK_METRIC} overhead_pct 순위:")
         for item in ranked:
@@ -227,11 +225,15 @@ def main() -> int:
 
     rows = build_rows(args.floor_outdir, probes, args.ambients, args.n_resamples, args.seed)
 
-    output = args.output or Path("ambient_compare.csv")
-    with open(output, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES, restval="")
-        writer.writeheader()
-        writer.writerows(rows)
+    if args.output:
+        output = args.output
+    else:
+        stamp = date.today().strftime("%Y%m%d")
+        host = socket.gethostname()
+        output = args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientcompare_{stamp}_{host}.xlsx"
+    compare_df = pd.DataFrame(rows).reindex(columns=FIELDNAMES).fillna("")
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        compare_df.to_excel(writer, sheet_name="ambient_compare", index=False)
 
     print(f"비교 결과 생성: {output} ({len(rows)}행)")
     return 0

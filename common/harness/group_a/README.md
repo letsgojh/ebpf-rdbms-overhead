@@ -204,10 +204,15 @@ make ambient-compare SYSTEM=duckdb PROBES="kprobe fentry" AMBIENTS="..."
 ```
 `FLOOR_OUTDIR`(기본 `systems/<SYSTEM>/results/group_a`, A-1 결과) 대 `AMBIENTS`로 넘긴 배경상태별
 outdir(1단계가 쌓아둔 `group_a_ambient_<AMBIENT>` 경로들)을 비교해, probe_type × 배경 × metric(4종)
-조합별로 한 행씩인 `ambient_compare.csv`를 낸다(기본 위치는 `FLOOR_OUTDIR/ambient_compare.csv`).
-raw 파일은 조건(floor 1개 + 배경 N개)당 한 번만 읽고 metric 4개 비교에 재사용한다 —
-`bootstrap_ci.py compare`를 metric마다 CLI로 따로 부르면 같은 raw를 최대 4번씩 다시 읽게 되므로
-그렇게 하지 않는다.
+조합별로 한 행씩인 `.xlsx`(시트명 `ambient_compare`)를 낸다 — 기본 파일명은
+`systems/README.md` 압축 파일명 규칙과 맞춘
+`FLOOR_OUTDIR/ebpf-rdbms-overhead_<system>_groupA_ambientcompare_<날짜>_<host>.xlsx`
+(`AMBIENT_OUTPUT`으로 오버라이드 가능). raw 파일은 조건(floor 1개 + 배경 N개)당 한 번만 읽고
+metric 4개 비교에 재사용한다 — `bootstrap_ci.py compare`를 metric마다 CLI로 따로 부르면 같은
+raw를 최대 4번씩 다시 읽게 되므로 그렇게 하지 않는다.
+
+합성 링크(floor와 ambient에 똑같은 raw를 걸어 diff=0/ci_overlap=True가 나오는지)로 실행 자체와
+`.xlsx` 생성 확인함 — 실제 배경상태 데이터로는 아직 안 돌려봄(Phase 3 완료 후 가능).
 
 **해석 기준(A-2):** 한 행의 `ci_overlap=True`면 그 probe_type·배경 조합은 "메커니즘 비용이 DB
 존재와 무관"을 지지. `False`면 `diff_ns`/`diff_pct`로 그 배경이 얼마나 영향을 주는지 정량화.

@@ -70,7 +70,11 @@ H1 가설("tracepoint≈raw_tracepoint < fentry < kprobe")과 다르게 tracepoi
   - [ ] DuckDB idle
 - [ ] Phase 4: 비교 — `make ambient-compare SYSTEM=duckdb TOP_N=2
       AMBIENTS="duckdb=../../../systems/duckdb/results/group_a_ambient_duckdb"` 실행 →
-      `ambient_compare.csv`
+      `ambient_compare.py`가 이제 CSV 대신 `rank-probes`와 같은 파일명 규칙의 `.xlsx`
+      (`ebpf-rdbms-overhead_duckdb_groupA_ambientcompare_<날짜>_<host>.xlsx`, 시트명
+      `ambient_compare`)를 생성하도록 코드 수정 완료 — 합성 데이터(floor=ambient로 링크해
+      diff=0/ci_overlap=True 확인)로 생성 자체는 검증했고, 실제 배경상태 데이터로는 Phase 3
+      끝나야 돌려볼 수 있음
 - [ ] Phase 5: 해석 — 각 행 `ci_overlap`으로 "메커니즘 비용이 DB 존재와 무관인지" 판정, `False`면
       `diff_ns`/`diff_pct`로 어떤 배경이 얼마나 영향 주는지 정리
 
