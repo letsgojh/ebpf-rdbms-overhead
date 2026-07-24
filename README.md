@@ -8,7 +8,7 @@ RDBMS 환경에서 eBPF probe가 유발하는 overhead를, 서로 다른 실행 
 |---|---|---|---|
 | 유재환 | DuckDB, Umbra | gaia2, gaia3 | Umbra는 심볼 접근성 미확정 — `docs/decisions_log.md` 참고 |
 | 김형규 | MySQL, PostgreSQL | gaia1,gaia5 | |
-| 미정 | ClickHouse | - | 담당자 확정 시 `systems/clickhouse/`에 착수 |
+| 유재환 | ClickHouse | gaia2 | 담당자 확정(2026-07-24) — 서버가 부족해 gaia2에 별도 clone(`ebpf-rdbms-overhead-clickhouse`)으로 분리 진행, `feat/clickhouse-init` 브랜치 |
 
 각자 자기 담당 시스템 디렉토리(`systems/<자기담당>/`)에서만 작업합니다. 서버는 물리적으로 분리되어 있고, 이 repo만 각자 clone해서 씁니다.
 
