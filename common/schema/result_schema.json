@@ -31,7 +31,7 @@
     },
     "probe_type": {
       "type": "string",
-      "enum": ["none", "kprobe", "kretprobe", "fentry", "fexit", "tracepoint", "raw_tracepoint"],
+      "enum": ["none", "kprobe", "kretprobe", "fentry", "fexit", "tracepoint", "raw_tracepoint", "uprobe", "uretprobe"],
       "description": "부착한 eBPF probe 종류. 미계측(baseline)은 none"
     },
     "probe_location": {

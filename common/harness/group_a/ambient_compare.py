@@ -28,16 +28,16 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bootstrap_ci import METRICS, compare_metrics, per_run_metrics  # noqa: E402
 
-FIELDNAMES = [
+NON_BASELINE_PROBES = ["kprobe", "fentry", "tracepoint", "raw_tracepoint"]
+RANK_METRIC = "p99"  # "family 간 차이" 순위는 tail latency(p99)로 판단 — mean은 tail 차이를 덮어버림
+
+COMPARE_COLUMNS = [
     "probe_type", "ambient", "metric",
     "floor_ns", "floor_ci_low_ns", "floor_ci_high_ns",
     "ambient_ns", "ambient_ci_low_ns", "ambient_ci_high_ns",
     "diff_ns", "diff_pct", "mannwhitney_u", "p_value", "significant", "ci_overlap",
     "note",
 ]
-
-NON_BASELINE_PROBES = ["kprobe", "fentry", "tracepoint", "raw_tracepoint"]
-RANK_METRIC = "p99"  # "family 간 차이" 순위는 tail latency(p99)로 판단 — mean은 tail 차이를 덮어버림
 
 
 def _raw_paths(outdir: Path, probe_type: str) -> list[Path]:
@@ -181,10 +181,14 @@ def main() -> int:
         help="출력 .xlsx 경로. 기본값은 --rank-only 여부에 따라 "
              "<floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx 또는 "
              "<floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientcompare_<날짜>_<host>.xlsx",
+
     )
     parser.add_argument("--n-resamples", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0, help="재현 가능한 비교를 위한 기본 seed(0)")
     args = parser.parse_args()
+
+    stamp = date.today().strftime("%Y%m%d")
+    host = socket.gethostname()
 
     if args.rank_only:
         ranked = select_top_probes(args.floor_outdir, len(NON_BASELINE_PROBES), args.n_resamples, args.seed)
@@ -196,12 +200,7 @@ def main() -> int:
                 f"overhead={item['overhead_ns']}ns, p={item['p_value']:.4g})"
             )
 
-        if args.output:
-            output = args.output
-        else:
-            stamp = date.today().strftime("%Y%m%d")
-            host = socket.gethostname()
-            output = args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientrank_{stamp}_{host}.xlsx"
+        output = args.output or args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientrank_{stamp}_{host}.xlsx"
         rank_df = pd.DataFrame([{"rank": i + 1, **item} for i, item in enumerate(ranked)])
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             rank_df.to_excel(writer, sheet_name="rank", index=False)
@@ -234,6 +233,7 @@ def main() -> int:
     compare_df = pd.DataFrame(rows).reindex(columns=FIELDNAMES).fillna("")
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         compare_df.to_excel(writer, sheet_name="ambient_compare", index=False)
+
 
     print(f"비교 결과 생성: {output} ({len(rows)}행)")
     return 0
