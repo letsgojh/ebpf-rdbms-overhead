@@ -1,0 +1,6 @@
+# PostgreSQL System Version Lock
+POSTGRESQL_VERSION=16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)
+POSTGRESQL_BINARY=/usr/lib/postgresql/16/bin/postgres
+KERNEL_VERSION=6.17.0-14-generic
+GCC_VERSION=13.3.0
+OS=Ubuntu 24.04 LTS (x86_64)
