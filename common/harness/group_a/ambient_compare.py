@@ -178,7 +178,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--output", type=Path, default=None,
-        help="출력 .xlsx 경로 (기본: <floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_<ambientrank|ambientcompare>_<날짜>_<host>.xlsx)",
+        help="출력 .xlsx 경로. 기본값은 --rank-only 여부에 따라 "
+             "<floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientrank_<날짜>_<host>.xlsx 또는 "
+             "<floor-outdir>/ebpf-rdbms-overhead_<system>_groupA_ambientcompare_<날짜>_<host>.xlsx",
+
     )
     parser.add_argument("--n-resamples", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0, help="재현 가능한 비교를 위한 기본 seed(0)")
@@ -221,10 +224,16 @@ def main() -> int:
 
     rows = build_rows(args.floor_outdir, probes, args.ambients, args.n_resamples, args.seed)
 
-    output = args.output or args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientcompare_{stamp}_{host}.xlsx"
-    compare_df = pd.DataFrame(rows).reindex(columns=COMPARE_COLUMNS)
+    if args.output:
+        output = args.output
+    else:
+        stamp = date.today().strftime("%Y%m%d")
+        host = socket.gethostname()
+        output = args.floor_outdir / f"ebpf-rdbms-overhead_{args.system}_groupA_ambientcompare_{stamp}_{host}.xlsx"
+    compare_df = pd.DataFrame(rows).reindex(columns=FIELDNAMES).fillna("")
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        compare_df.to_excel(writer, sheet_name="compare", index=False)
+        compare_df.to_excel(writer, sheet_name="ambient_compare", index=False)
+
 
     print(f"비교 결과 생성: {output} ({len(rows)}행)")
     return 0
