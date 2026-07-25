@@ -2,7 +2,7 @@
 
 ## 1. 서버 및 환경
 - **담당자**: 김형규
-- **서버**: gaia1 / gaia5
+- **서버**: gaia3 (PostgreSQL 전용) / (MySQL은 gaia5에서 진행)
 - **PostgreSQL 버전**: `16.14 (Ubuntu 16.14-0ubuntu0.24.04.1)`
 - **바이너리 위치**: `/usr/lib/postgresql/16/bin/postgres`
 - **커널 버전**: `6.17.0-14-generic`
