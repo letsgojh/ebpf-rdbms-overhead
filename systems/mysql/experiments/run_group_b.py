@@ -4,6 +4,7 @@ MySQL Group B Experiment Runner Harness
 Executes 4-way controlled measurements (none, perf, ebpf, both) across
 Probe Locations (query, operator, tuple) x Scale Factors x Queries.
 Outputs standardized CSV results strictly matching common/schema/result_schema.json.
+Flushes logs and CSV entries in real-time.
 """
 
 import argparse
@@ -26,6 +27,10 @@ PROBE_SYMBOLS = {
     "operator": "ha_rnd_next",
     "tuple": "row_search_mvcc"
 }
+
+def log(msg):
+    timestamp = time.strftime("[%Y-%m-%d %H:%M:%S]")
+    print(f"{timestamp} {msg}", flush=True)
 
 def get_git_commit_hash(repo_dir):
     try:
@@ -92,20 +97,21 @@ def main():
         for q in args.query:
             sql_path = os.path.join(sys_dir, "queries", f"q{q}.sql")
             if not os.path.exists(sql_path):
-                print(f"[!] Warning: Query file {sql_path} missing, skipping.")
+                log(f"[!] Warning: Query file {sql_path} missing, skipping.")
                 continue
 
             for loc in args.location:
                 for mode in args.control:
                     probe_type_schema = "none" if mode == "none" else "kprobe"
-
-                    print(f"[*] Starting Batch: SF={sf}, Q={q}, Location={loc}, ControlMode={mode}")
+                    log(f"=== Starting Batch: SF={sf}, Q={q}, Location={loc}, ControlMode={mode} ===")
                     
                     # Warmup
+                    log(f"Running {args.warmup} warmup iterations...")
                     for w in range(args.warmup):
                         run_single_query(mysql_cmd, sql_path, db_name)
 
                     # Measured runs
+                    log(f"Running {args.reps} measured iterations...")
                     run_latencies = []
                     for rep in range(args.reps):
                         csv_filename = f"mysql_{probe_type_schema}_sf{sf}_{loc}_run{rep:02d}.csv"
@@ -138,11 +144,14 @@ def main():
                                 }
                                 writer.writerow(row)
 
+                            if (rep + 1) % 5 == 0 or (rep + 1) == args.reps:
+                                log(f"  -> Progress: [{rep+1}/{args.reps}] Last Latency: {lat_ms:.2f} ms")
+
                     if run_latencies:
                         avg_lat = sum(run_latencies) / len(run_latencies)
-                        print(f"[+] Completed Batch: SF={sf}, Q={q}, Location={loc}, Control={mode} -> Avg Latency: {avg_lat:.2f} ms")
+                        log(f"[SUCCESS Batch] SF={sf}, Q={q}, Location={loc}, Control={mode} -> Avg Latency: {avg_lat:.2f} ms")
 
-    print(f"[SUCCESS] All measurements completed! Results saved under {results_dir}")
+    log(f"[ALL SUCCESS] All measurements completed! Results saved under {results_dir}")
 
 if __name__ == "__main__":
     main()
