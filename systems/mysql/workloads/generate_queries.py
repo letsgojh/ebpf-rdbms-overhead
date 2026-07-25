@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 def validate_queries(queries_dir, port, host, user, password, dbname):
-    print(f"[*] Validating 22 queries against MySQL database '{dbname}' on {host}:{port}...")
+    print(f"[*] Validating queries in '{queries_dir}' against MySQL database '{dbname}' on {host}:{port}...")
     mysql_cmd = ["mysql", "-u", user, "-h", host, "-P", str(port)]
     if password:
         mysql_cmd.append(f"-p{password}")
@@ -32,6 +32,7 @@ def validate_queries(queries_dir, port, host, user, password, dbname):
             success_count += 1
         else:
             print(f"    [!] Q{q:02d}: EXPLAIN FAILED")
+            print(res.stderr)
 
     print(f"[+] Validation Summary: {success_count} queries passed EXPLAIN check.")
 
@@ -45,7 +46,11 @@ def main():
     args = parser.parse_args()
 
     workload_dir = os.path.dirname(os.path.abspath(__file__))
-    queries_dir = os.path.join(workload_dir, "queries")
+    sys_dir = os.path.dirname(workload_dir)
+    queries_dir = os.path.join(sys_dir, "queries")
+
+    if not os.path.exists(queries_dir):
+        queries_dir = os.path.join(workload_dir, "queries")
 
     validate_queries(queries_dir, args.port, args.host, args.user, args.password, args.dbname)
 
