@@ -187,6 +187,18 @@ probe family는 A-1에서 family 간 차이가 가장 컸던 1~2종으로 축소
 
 이 표에서 "구현 곤란" 칸은 실제로 시도해보고 안 되면 빈 셀로 남기고 그 자체를 결과로 보고한다(비대칭 매트릭스, Group A-2와 동일 논리).
 
+#### DuckDB 오퍼레이터당 hook 대상 (파일럿 쿼리 실측, v1.4.1)
+
+B-4 파일럿 쿼리 3개를 `EXPLAIN`으로 확인한 실제 물리 플랜과, 거기 등장하는 오퍼레이터 타입별 구체 심볼(역할: GetData=source/Execute=intermediate/Sink=sink).
+
+| 쿼리 | 물리 플랜(EXPLAIN) | 오퍼레이터 → 심볼 |
+|---|---|---|
+| Q6 (스캔+필터) | SEQ_SCAN → PROJECTION → UNGROUPED_AGGREGATE | `PhysicalTableScan::GetData`, `PhysicalProjection::Execute`, `PhysicalUngroupedAggregate::Sink`+`GetData` |
+| Q1 스타일(GROUP BY) | SEQ_SCAN → PROJECTION → PERFECT_HASH_GROUP_BY → PROJECTION | `PhysicalTableScan::GetData`, `PhysicalProjection::Execute`(2곳), `PhysicalPerfectHashAggregate::Sink`+`GetData` |
+| Q9 (다중 조인) | SEQ_SCAN(×6) → HASH_JOIN(×5) → PROJECTION → HASH_GROUP_BY → ORDER_BY | `PhysicalTableScan::GetData`, `PhysicalHashJoin::Sink`+`GetData`, `PhysicalProjection::Execute`, `PhysicalHashAggregate::Sink`+`GetData`, `PhysicalOrder::Sink`+`GetData` |
+
+**주의 — HASH_JOIN probe측 확인 필요.** `PhysicalHashJoin`은 `Sink`(build측)/`GetData` 심볼만 있고 `Execute` 오버라이드가 없다. probe측(좌측 자식에서 흘러온 청크를 조인하는 경로)은 여러 오퍼레이터가 공유하는 base wrapper `CachingPhysicalOperator::Execute`를 통해 호출되는 것으로 보이는데, 이 서버엔 DuckDB 소스/디버그 심볼이 없어 vtable 디스어셈블 없이는 확정이 어렵다 — 실제 uprobe 부착 전 `physical_hash_join.cpp` 소스로 재확인 필요.
+
 ### B-3. 독립변수 2 — 스케일 팩터: SF1 / SF10 / SF100
 
 ### B-4. 파일럿 대상 쿼리 (실행량 축소안)
