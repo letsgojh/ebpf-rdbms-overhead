@@ -1,0 +1,3 @@
+# Ignore generated TPC-H datasets and dbgen binaries
+workloads/data/
+workloads/dbgen/
