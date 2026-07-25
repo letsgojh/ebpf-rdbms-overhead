@@ -1,0 +1,4 @@
+results/*
+!results/.gitkeep
+setup/VERSION.lock.tmp
+workloads/data/
