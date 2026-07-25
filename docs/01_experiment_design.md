@@ -153,6 +153,11 @@ probe family는 A-1에서 family 간 차이가 가장 컸던 1~2종으로 축소
 
 **가설(H1).** 정규화된 오버헤드(튜플당 비용)의 log-log 회귀 기울기(elasticity)가 위치가 hot path에 가까워질수록(쿼리당→튜플당) 유의하게 커진다.
 
+**Hot path / Cold path 정의.** 판단 기준은 "쿼리 1회 실행당 해당 hook이 호출되는 횟수가 SF(데이터 볼륨)에 따라 어떻게 증가하는가"이다.
+- **Cold path** — 호출 횟수가 SF와 무관(O(1)) 하거나 SF 증가에 둔감한 지점. B-1의 "쿼리당 1회", "오퍼레이터당 1회" 단계가 해당. 쿼리 실행 생애주기 중 한 번 또는 쿼리 플랜 크기에만 비례해 호출되므로, SF를 올려도 절대 오버헤드가 거의 늘지 않는다.
+- **Hot path** — 호출 횟수가 SF(즉 처리 튜플/바이트 수)에 비례해 선형 이상(O(N) 이상)으로 증가하는 지점. B-1의 "청크/블록당 1회", "튜플당 1회" 단계가 해당. SF를 올릴수록 hook 호출 총량이 늘어 절대/정규화 오버헤드 모두에 직접 반영된다.
+- 이 정의에 따라 B-1의 4단계는 콜드→핫 순서(쿼리당 → 오퍼레이터당 → 청크당 → 튜플당)로 배열되어 있으며, H1의 "hot path에 가까워질수록"은 이 순서상 오른쪽으로 이동하는 것을 뜻한다.
+
 **Definition of Done.**
 - [ ] 시스템별 "구현 가능한 probe 위치" 매트릭스 확정 (아래 B-2)
 - [ ] 파일럿 3쿼리 × 3SF × 구현 가능한 위치 수 × 100회 결과 확보
@@ -161,18 +166,20 @@ probe family는 A-1에서 family 간 차이가 가장 컸던 1~2종으로 축소
 
 ### B-1. 독립변수 1 — probe 위치 (4단계, 호출 빈도 오름차순)
 
-| 단계 | 정의 | 비고 |
-|---|---|---|
-| 쿼리당 1회 | 쿼리 시작/종료 | 모든 시스템에서 구현 가능 |
-| 오퍼레이터당 1회 | 물리 연산자 실행 1회 | 모든 시스템 가능하나 연산자 경계 정의가 시스템마다 다름 |
-| 청크/블록당 1회 | 벡터화 배치 단위 | DuckDB/ClickHouse만 자연스러움 |
-| 튜플당 1회 | 개별 row | Postgres/MySQL만 자연스러움; DuckDB/ClickHouse는 구조적으로 어려울 수 있음 |
+| 단계 | 정의 | Path 분류 | 비고 |
+|---|---|---|---|
+| 쿼리당 1회 | 쿼리 시작/종료 | Cold | 모든 시스템에서 구현 가능 |
+| 오퍼레이터당 1회 | 물리 연산자 노드 1개당 1회 (쿼리 플랜상 연산자 개수 기준 — 구조적 정의, SF 무관하다고 가정) | Cold* | 모든 시스템 가능하나 연산자 경계 정의가 시스템마다 다름 |
+| 청크/블록당 1회 | 벡터화 배치 단위 | Hot | DuckDB/ClickHouse만 자연스러움 |
+| 튜플당 1회 | 개별 row | Hot | Postgres/MySQL만 자연스러움; DuckDB/ClickHouse는 구조적으로 어려울 수 있음 |
+
+\* **주의 — 정의와 실제 hook 호출 빈도의 괴리.** 위 "오퍼레이터당 1회"는 "쿼리 플랜의 연산자 노드 개수"라는 구조적 정의라서 SF 무관(Cold)이지만, B-2의 실제 hook 후보는 Volcano/pull 실행 모델 특성상 노드 개수가 아니라 "그 연산자가 튜플/청크를 산출할 때마다" 호출된다 — PostgreSQL `ExecProcNode`는 사실상 튜플당 호출에 가깝고, DuckDB `PhysicalOperator::GetData`는 청크당 호출과 같은 오더다. 즉 실측 호출 빈도는 표의 구조적 정의보다 SF에 더 민감할 수 있다. Cold 분류는 어디까지나 "이 위치를 정의한 방식" 기준이며, 실제로 Cold인지는 B-6 회귀 기울기로 검증 대상이다(리스크 항목 B-8 참조).
 
 ### B-2. 시스템별 hook 후보 (버전 확인 필요 — 실행 전 소스 재확인 필수)
 
 | 시스템 | 쿼리당 | 오퍼레이터당 | 청크당 | 튜플당 |
 |---|---|---|---|---|
-| DuckDB | `Connection::Query` 진입/반환 | `PhysicalOperator::GetData` | `DataChunk` 처리 루프 (STANDARD_VECTOR_SIZE=2048) | 구현 곤란 — 벡터 내부 스칼라 루프, 별도 근사 필요 |
+| DuckDB | `Connection::Query(string const&)` 진입/반환 (v1.4.1 심볼 확인) | `PhysicalOperator::GetData/Execute/Sink`는 base 구현일 뿐 — 실제 호출은 구체 오퍼레이터 타입별 심볼(`PhysicalTableScan::GetData`, `PhysicalHashAggregate::GetData/Sink`, `PhysicalHashJoin::GetData/Sink` 등)로 나뉘어 있음. 쿼리 플랜(`EXPLAIN`)에 등장하는 타입마다 uprobe 필요 | `PipelineExecutor::Execute(DataChunk&, DataChunk&, idx)`/`FetchFromSource` — 오퍼레이터 종류 무관하게 파이프라인당 청크 1개당 1회 호출되는 단일 심볼(v1.4.1 확인, STANDARD_VECTOR_SIZE=2048) | 구현 곤란 — 벡터 내부 스칼라 루프, 별도 근사 필요 |
 | PostgreSQL | `ExecutorStart`/`ExecutorEnd` | `ExecProcNode` | 구현 곤란 — 튜플단위가 기본 (일부 batch API 검토) | `table_scan_getnextslot` (신버전) / `heap_getnext` (구버전) |
 | MySQL | `mysql_execute_command` | handler 계층 (`ha_rnd_next` 등) | 구현 곤란 | `row_search_mvcc` |
 | ClickHouse | `executeQuery` | `IProcessor::work` | `Block` 처리 (max_block_size 기본값 확인 필요, granule 8,192행과 별개 개념) | 구조적으로 존재 안 할 수 있음 — "신호 없음"도 결과 |
@@ -210,6 +217,7 @@ Tier 1(처리량 저하율/레이턴시 오버헤드 P50~P999/CPU 오버헤드) 
 
 - 시스템별 "구현 곤란" 위치가 예상보다 많으면 → 비대칭 매트릭스로 투명하게 보고, 회귀분석은 구현 가능한 위치만으로 진행.
 - SF100 × 22쿼리 × 100회가 파일럿 기준 너무 오래 걸리면 → 반복 횟수를 100회에서 낮추되(예: 30회) bootstrap CI 폭이 커지는 걸 감수, 혹은 SF100을 대표 쿼리에만 한정.
+- "오퍼레이터당 1회" 위치는 정의상 Cold(SF 무관, B-1 각주 참조)로 분류했으나, 실제 hook(`ExecProcNode`, `GetData` 등)은 pull 실행 모델 특성상 튜플/청크 단위로 반복 호출되어 실측 탄력성이 다르게 나올 수 있다 → B-6 회귀에서 이 위치의 기울기가 유의하게 0보다 크면(SF 민감) Cold 가정을 재검토하고, 실제 호출 빈도 기준으로 Path 분류를 재조정한다.
 
 ---
 
