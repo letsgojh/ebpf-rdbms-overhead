@@ -204,8 +204,9 @@ make ambient-compare SYSTEM=duckdb PROBES="kprobe fentry" AMBIENTS="..."
 ```
 `FLOOR_OUTDIR`(기본 `systems/<SYSTEM>/results/group_a`, A-1 결과) 대 `AMBIENTS`로 넘긴 배경상태별
 outdir(1단계가 쌓아둔 `group_a_ambient_<AMBIENT>` 경로들)을 비교해, probe_type × 배경 × metric(4종)
-조합별로 한 행씩인 `ambient_compare.csv`를 낸다(기본 위치는 `FLOOR_OUTDIR/ambient_compare.csv`).
-raw 파일은 조건(floor 1개 + 배경 N개)당 한 번만 읽고 metric 4개 비교에 재사용한다 —
+조합별로 한 행씩인 `.xlsx`(`compare` 시트 1개)를 낸다. `rank-probes`와 같은 파일명 규칙—기본
+`FLOOR_OUTDIR/ebpf-rdbms-overhead_<system>_groupA_ambientcompare_<날짜>_<host>.xlsx`(`AMBIENT_OUTPUT`으로
+직접 지정 가능). raw 파일은 조건(floor 1개 + 배경 N개)당 한 번만 읽고 metric 4개 비교에 재사용한다 —
 `bootstrap_ci.py compare`를 metric마다 CLI로 따로 부르면 같은 raw를 최대 4번씩 다시 읽게 되므로
 그렇게 하지 않는다.
 
