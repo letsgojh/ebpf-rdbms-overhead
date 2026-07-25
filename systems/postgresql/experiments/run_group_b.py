@@ -93,7 +93,7 @@ def main():
 
         # Prepare CSV File header
         with open(csv_path, "w", encoding="utf-8") as fcsv:
-            fcsv.write("system,group,sub_experiment,probe_type,probe_location,sf,run_id,query_id,throughput_qps,latency_ms,kernel_version,timestamp\n")
+            fcsv.write("system,group,sub_experiment,probe_type,probe_location,sf,run_id,query_id,throughput_qps,latency_ms,kernel_version,system_version_hash,timestamp\n")
 
             for q_id in query_list:
                 sql_path = os.path.join(queries_dir, f"q{q_id}.sql")
@@ -109,7 +109,7 @@ def main():
                     qps = 1000.0 / lat_ms if lat_ms > 0 else 0.0
                     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     
-                    fcsv.write(f"postgresql,B,B-scale,uprobe,{probe_loc},{int(args.sf)},{rep},{q_id},{qps:.4f},{lat_ms:.4f},{kernel_ver},{ts}\n")
+                    fcsv.write(f"postgresql,B,B-scale,uprobe,{probe_loc},{int(args.sf)},{rep},{q_id},{qps:.4f},{lat_ms:.4f},{kernel_ver},16.14-0ubuntu0.24.04.1,{ts}\n")
 
     print(f"\n[+] Group B Experiment Execution Complete! Results saved to {results_dir}")
 
