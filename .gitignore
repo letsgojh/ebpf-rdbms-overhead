@@ -16,3 +16,7 @@ __pycache__/
 
 # OS/에디터
 .DS_Store
+
+# 임시 실행 로그 파일
+*.log
+
